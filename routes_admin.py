@@ -67,37 +67,21 @@ async def admin_dashboard(_admin=Depends(require_admin)):
 
     # Exam performance — avg score per exam
  # Exam performance — avg score per exam
+
+# Exam performance — avg score per exam
 perf = await db.attempts.aggregate([
     {"$match": {"status": "submitted"}},
-    {
-        "$group": {
-            "_id": "$exam_id",
-            "avg_score": {"$avg": "$score"},
-            "attempts": {"$sum": 1}
-        }
-    },
+    {"$group": {"_id": "$exam_id", "avg_score": {"$avg": "$score"}, "attempts": {"$sum": 1}}},
     {"$limit": 8},
-]).to_list(length=100)
-
+])
 exam_performance = []
-
 for p in perf:
-    exam_id = p.get("_id")
-
-    if not exam_id:
-        continue
-
-    ex = await db.exams.find_one(
-        {"id": exam_id},
-        {"_id": 0, "name": 1}
-    )
-
+    ex = await db.exams.find_one({"id": p["_id"]}, {"_id": 0, "name": 1})
     exam_performance.append({
-        "name": ex["name"] if ex else "Unknown Exam",
-        "avg": round(p.get("avg_score", 0), 2),
-        "attempts": p.get("attempts", 0),
+        "name": ex["name"] if ex else "Exam",
+        "avg": round(p.get("avg_score") or 0, 2),
+        "attempts": p.get("attempts", 0)
     })
-
     return {
         "kpis": {
             "total_students": total_students,
