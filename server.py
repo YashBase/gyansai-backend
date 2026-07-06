@@ -48,7 +48,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:8080",
     "https://gyansai-frontend.vercel.app/",
-    "https://gyansai-z7lo.vercel.app/"
+    "https://gyansai-backend.vercel.app/"
     
 ]
 
