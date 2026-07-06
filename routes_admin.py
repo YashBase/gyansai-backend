@@ -88,7 +88,7 @@ async def admin_dashboard(_admin=Depends(require_admin)):
         },
         "revenue_chart": revenue_chart,
         "student_growth": student_growth,
-        "exam_performance": exam_performance,
+        "score_chart": exam_performance,
         "recent_activities": activities,
         "live_attempts": live,
     }
