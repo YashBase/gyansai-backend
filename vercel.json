@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "functions": {
+    "app.py": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/app.py"
+    }
+  ],
+  "env": {
+    "PYTHONPATH": "./"
+  }
+}
