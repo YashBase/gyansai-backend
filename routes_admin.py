@@ -66,38 +66,15 @@ async def admin_dashboard(_admin=Depends(require_admin)):
     student_growth = [{"month": k, "count": v} for k, v in sorted(growth.items())]
 
     # Exam performance — avg score per exam
-perf = await db.attempts.aggregate([
-    {"$match": {"status": "submitted"}},
-    {
-        "$group": {
-            "_id": "$exam_id",
-            "avg_score": {"$avg": "$score"},
-            "attempts": {"$sum": 1}
-        }
-    },
-    {"$limit": 8}
-]).to_list(length=100)
-
-exam_performance = []
-
-for p in perf:
-    print("Aggregation Result:", p)
-
-    exam_id = p.get("_id")
-
-    if exam_id is None:
-        continue
-
-    ex = await db.exams.find_one(
-        {"id": exam_id},
-        {"_id": 0, "name": 1}
-    )
-
-    exam_performance.append({
-        "name": ex["name"] if ex else "Unknown Exam",
-        "avg": round(p.get("avg_score", 0), 2),
-        "attempts": p.get("attempts", 0)
-    })
+    perf = await db.attempts.aggregate([
+        {"$match": {"status": "submitted"}},
+        {"$group": {"_id": "$exam_id", "avg_score": {"$avg": "$score"}, "attempts": {"$sum": 1}}},
+        {"$limit": 8},
+    ])
+    exam_performance = []
+    for p in perf:
+        ex = await db.exams.find_one({"id": p["_id"]}, {"_id": 0, "name": 1})
+        exam_performance.append({"name": ex["name"] if ex else "Exam", "avg": round(p.get("avg_score") or 0, 2), "attempts": p.get("attempts", 0)})
 
     return {
         "kpis": {
@@ -111,7 +88,7 @@ for p in perf:
         },
         "revenue_chart": revenue_chart,
         "student_growth": student_growth,
-        "score_chart": exam_performance,
+        "exam_performance": exam_performance,
         "recent_activities": activities,
         "live_attempts": live,
     }
