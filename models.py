@@ -107,8 +107,9 @@ class QuestionIn(BaseModel):
     options: List[QuestionOption] = Field(default_factory=list)
     correct_answer: Any = None  # string, list, number depending on type
     explanation: Optional[str] = ""
-    marks: float = 4.0
-    negative_marks: float = 1.0
+    marking_pattern: str = "positive_only"
+    default_marks: float = 4.0
+    default_negative_marks: float = 1.0
 
 
 # ---------- Exams ----------
