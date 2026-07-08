@@ -583,6 +583,13 @@ async def get_result(attempt_id: str, user=Depends(get_current_user)):
     a["rank"] = rank
     a["total_participants"] = total
     a["leaderboard"] = siblings[:10]
+    exam = await db.exams.find_one({"id": a.get("exam_id")}, {"_id": 0}) or {}
+    resources = {}
+    if exam.get("show_answer_key_to_students") and exam.get("answer_key_url"):
+        resources["answer_key_url"] = exam.get("answer_key_url")
+    if exam.get("show_detailed_solutions_to_students") and exam.get("detailed_solution_url"):
+        resources["detailed_solution_url"] = exam.get("detailed_solution_url")
+    a["exam_resources"] = resources
     # Accuracy
     attempted = a.get("correct", 0) + a.get("wrong", 0)
     a["accuracy"] = round((a.get("correct", 0) / attempted) * 100, 2) if attempted else 0
@@ -765,6 +772,10 @@ async def exam_analytics(exam_id: str, _admin=Depends(require_admin)):
         "avg": round(sum(scores) / len(scores), 2),
         "pass_pct": round(passed * 100 / len(rows), 2),
         "subject_avg": subj_avg,
+        "answer_key_url": exam.get("answer_key_url", ""),
+        "detailed_solution_url": exam.get("detailed_solution_url", ""),
+        "show_answer_key_to_students": bool(exam.get("show_answer_key_to_students", False)),
+        "show_detailed_solutions_to_students": bool(exam.get("show_detailed_solutions_to_students", False)),
     }
 
 

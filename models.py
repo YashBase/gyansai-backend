@@ -138,6 +138,10 @@ class ExamIn(BaseModel):
     enable_webcam: bool = True
     is_published: bool = False
     price: float = 0.0  # 0 = free
+    answer_key_url: Optional[str] = ""
+    detailed_solution_url: Optional[str] = ""
+    show_answer_key_to_students: bool = False
+    show_detailed_solutions_to_students: bool = False
 
 
 # ---------- Exam Attempts ----------
