@@ -134,9 +134,18 @@ async def handle_unexpected_exception(request: Request, exc: Exception):
         request.url,
     )
 
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal server error. Please check server logs."
-        },
-    )
+    content = {"detail": "Internal server error. Please check server logs."}
+    response = JSONResponse(status_code=500, content=content)
+
+    # Ensure CORS headers are present on error responses so browsers don't block them.
+    origin = request.headers.get("origin")
+    try:
+        if origin and (origin in origins or re.match(r"https://([a-z0-9-]+\.)*vercel\.app", origin)):
+            response.headers["access-control-allow-origin"] = origin
+            response.headers["access-control-allow-credentials"] = "true"
+            response.headers["vary"] = "Origin"
+    except Exception:
+        # Don't let header-setting errors mask the original exception
+        pass
+
+    return response
