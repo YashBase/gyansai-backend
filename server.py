@@ -8,7 +8,7 @@ import logging
 import os
 import re
 
-from core import close_mongo_client
+from core import close_mongo_client, seed_initial_data
 
 try:
     from routes_auth import router as auth_router
@@ -30,6 +30,9 @@ except Exception as exc:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create default data if database is empty
+    await seed_initial_data()
+
     yield
 
     close_mongo_client()
