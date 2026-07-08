@@ -166,11 +166,22 @@ class MongoCollection:
         return [value for value in values if value is not None]
 
     async def aggregate(self, pipeline: list[dict]):
+        from bson import ObjectId
+
         wrapped_pipeline = [{"$match": {"collection_name": self.name}}] + pipeline
         cursor = self._root_collection.aggregate(wrapped_pipeline)
         docs = []
         async for doc in cursor:
-            docs.append(self._clean_doc(doc))
+            if not doc:
+                docs.append(doc)
+                continue
+            # Preserve aggregation _id values (they may be the grouped key).
+            # Only strip MongoDB object `_id` values (ObjectId instances) which are internal.
+            cleaned = dict(doc)
+            if isinstance(cleaned.get("_id"), ObjectId):
+                cleaned.pop("_id", None)
+            cleaned.pop("collection_name", None)
+            docs.append(cleaned)
         return docs
 
 
