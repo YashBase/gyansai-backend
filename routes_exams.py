@@ -1,5 +1,7 @@
 """Exam routes: admin CRUD, student start/save/submit, proctoring & results."""
+import json
 import random
+import re
 import base64
 import logging
 from io import BytesIO
@@ -62,20 +64,74 @@ def _strip(q: dict, include_answer: bool = False) -> dict:
     return q
 
 
+def _normalize_choice_tokens(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        values = []
+        for item in value:
+            if item is None:
+                continue
+            if isinstance(item, str):
+                text = item.strip()
+            else:
+                text = str(item).strip()
+            if text:
+                values.append(text.lower())
+        return values
+    if isinstance(value, dict):
+        if "answer" in value:
+            return _normalize_choice_tokens(value["answer"])
+        if "value" in value:
+            return _normalize_choice_tokens(value["value"])
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, (list, tuple, set)):
+            return _normalize_choice_tokens(parsed)
+        return [part.strip().lower() for part in re.split(r"[,;|]+", text) if part.strip()]
+    return [str(value).strip().lower()]
+
+
+def _normalize_answer(question: dict, answer: Any) -> Any:
+    qtype = question.get("type", "mcq_single")
+    if qtype == "mcq_multi":
+        return _normalize_choice_tokens(answer)
+    if qtype == "true_false":
+        if isinstance(answer, bool):
+            return "true" if answer else "false"
+        if isinstance(answer, str):
+            return answer.strip().lower()
+    if qtype == "numerical":
+        if isinstance(answer, str):
+            return answer.strip()
+    if isinstance(answer, str):
+        return answer.strip()
+    return answer
+
+
 def _is_correct(question: dict, answer: Any) -> bool:
     qtype = question.get("type", "mcq_single")
     correct = question.get("correct_answer")
     if answer is None or answer == "" or correct is None:
         return False
     if qtype == "mcq_multi":
-        if not isinstance(answer, list) or not isinstance(correct, list):
+        answer_tokens = _normalize_choice_tokens(answer)
+        correct_tokens = _normalize_choice_tokens(correct)
+        if not answer_tokens or not correct_tokens:
             return False
-        return sorted(answer) == sorted(correct)
+        return sorted(answer_tokens) == sorted(correct_tokens)
     if qtype == "numerical":
         try:
             return abs(float(answer) - float(correct)) < 1e-3
         except Exception:
-            return str(answer).strip() == str(correct).strip()
+            return str(answer).strip().lower() == str(correct).strip().lower()
     return str(answer).strip().lower() == str(correct).strip().lower()
 
 
@@ -370,9 +426,11 @@ async def save_answer(data: SaveAnswerIn, student=Depends(require_student)):
         raise HTTPException(status_code=404, detail="Attempt not found")
     if a["status"] != "in_progress":
         raise HTTPException(status_code=400, detail="Attempt already submitted")
+    question = await db.questions.find_one({"id": data.question_id}, {"_id": 0})
+    normalized_answer = _normalize_answer(question or {}, data.answer)
     await db.attempts.update_one(
         {"id": data.attempt_id},
-        {"$set": {f"answers.{data.question_id}": {"answer": data.answer, "status": data.status}}},
+        {"$set": {f"answers.{data.question_id}": {"answer": normalized_answer, "status": data.status}}},
     )
     return {"ok": True}
 
