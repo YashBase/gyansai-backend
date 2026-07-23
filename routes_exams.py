@@ -116,6 +116,28 @@ def _normalize_answer(question: dict, answer: Any) -> Any:
     return answer
 
 
+def _resolve_marking(question: dict, exam: Optional[dict] = None) -> tuple[float, float]:
+    """Return effective positive/negative marks for a question.
+
+    Older question docs use `marks` / `negative_marks`, while newer question forms
+    persist `default_marks` / `default_negative_marks`. The exam-level defaults are
+    used as the fallback when a question doesn't specify its own values.
+    """
+    marks = question.get("marks")
+    if marks is None:
+        marks = question.get("default_marks")
+    if marks is None:
+        marks = (exam or {}).get("default_marks", 4)
+
+    negative = question.get("negative_marks")
+    if negative is None:
+        negative = question.get("default_negative_marks")
+    if negative is None:
+        negative = (exam or {}).get("default_negative", 1)
+
+    return float(marks or 0), float(negative or 0)
+
+
 def _is_correct(question: dict, answer: Any) -> bool:
     qtype = question.get("type", "mcq_single")
     correct = question.get("correct_answer")
@@ -383,6 +405,16 @@ async def start_attempt(data: StartAttemptIn, student=Depends(require_student)):
     if exam.get("randomize"):
         random.shuffle(ordered)
 
+    normalized_questions = []
+    total_marks = 0.0
+    for q in ordered:
+        mark_pos, mark_neg = _resolve_marking(q, exam)
+        q_snapshot = dict(q)
+        q_snapshot["marks"] = mark_pos
+        q_snapshot["negative_marks"] = mark_neg
+        normalized_questions.append(_strip(q_snapshot))
+        total_marks += mark_pos
+
     attempt = {
         "id": new_id(),
         "exam_id": data.exam_id,
@@ -395,10 +427,10 @@ async def start_attempt(data: StartAttemptIn, student=Depends(require_student)):
         "tab_switches": 0,
         "violations": [],
         "answers": {},  # qid -> {answer, status}
-        "questions": [_strip(dict(q)) for q in ordered],
+        "questions": normalized_questions,
         "status": "in_progress",
         "score": None,
-        "max_score": sum(q.get("marks", 0) for q in ordered),
+        "max_score": round(total_marks, 2),
     }
     await db.attempts.insert_one(attempt)
     attempt.pop("_id", None)
@@ -517,6 +549,7 @@ async def _do_submit(attempt_id: str, reason: Optional[str] = None) -> dict:
 
     exam = await db.exams.find_one({"id": a["exam_id"]}, {"_id": 0})
     negative = (exam or {}).get("negative_marking", True)
+    marking_mode = (exam or {}).get("marking_mode", "custom")
     # Need actual questions with answers
     qids = [q["id"] for q in a["questions"]]
     full = await db.questions.find({"id": {"$in": qids}}, {"_id": 0}).to_list(1000)
@@ -534,8 +567,11 @@ async def _do_submit(attempt_id: str, reason: Optional[str] = None) -> dict:
         qid = q["id"]
         info = full_map.get(qid, {})
         ans = (answers.get(qid) or {}).get("answer")
-        marks = q.get("marks", 4)
-        neg = q.get("negative_marks", 1) if negative else 0
+        marks, neg = _resolve_marking(q, exam)
+        if marking_mode in {"positive", "none"}:
+            neg = 0
+        elif not negative:
+            neg = 0
         qtype = q.get("type", "mcq_single")
         result = "skipped"
         mark_got = 0
